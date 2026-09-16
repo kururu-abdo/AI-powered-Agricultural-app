@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Foundation: no data features yet. Open paths only alongside tested,
+    // tenant-scoped rules in the feature that owns them.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -13,25 +13,87 @@ service cloud.firestore {
     function staff(farmId) {
       return member(farmId) && role(farmId) in ['owner', 'manager'];
     }
+    function owner(farmId) {
+      return member(farmId) && role(farmId) == 'owner'
+        && get(/databases/$(database)/documents/farms/$(farmId)).data.ownerId == request.auth.uid;
+    }
+    function bootstrap(farmId, uid) {
+      return verified() && uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/farms/$(farmId))
+        && getAfter(/databases/$(database)/documents/farms/$(farmId)).data.ownerId == uid;
+    }
+    function notOwner(farmId, uid) {
+      return get(/databases/$(database)/documents/farms/$(farmId)).data.ownerId != uid;
+    }
+    function validName(name) {
+      return name is string && name.size() >= 2 && name.size() <= 80;
+    }
+    function validMember(uid) {
+      return request.resource.data.keys().hasAll(['uid', 'role', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['uid', 'role', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.updatedAt == request.time;
+    }
+    function mirrorMatches(farmId, uid, memberRole) {
+      let mirror = getAfter(/databases/$(database)/documents/users/$(uid)/farms/$(farmId)).data;
+      return mirror.farmId == farmId && mirror.role == memberRole;
+    }
+    function memberMatches(farmId, uid, memberRole) {
+      let membership = getAfter(/databases/$(database)/documents/farms/$(farmId)/members/$(uid)).data;
+      return membership.uid == uid && membership.role == memberRole;
+    }
     match /users/{uid}/farms/{farmId} {
-      // Server-maintained discovery index. Contains IDs/roles, no farm content.
       allow read: if verified() && request.auth.uid == uid;
-      allow write: if false;
+      allow create, update: if verified()
+        && request.resource.data.keys().hasAll(['farmId', 'role'])
+        && request.resource.data.keys().hasOnly(['farmId', 'role'])
+        && request.resource.data.farmId == farmId
+        && memberMatches(farmId, uid, request.resource.data.role)
+        && ((bootstrap(farmId, uid) && request.resource.data.role == 'owner')
+          || (owner(farmId) && notOwner(farmId, uid)
+            && request.resource.data.role in ['manager', 'member']));
+      allow delete: if owner(farmId) && notOwner(farmId, uid)
+        && !existsAfter(/databases/$(database)/documents/farms/$(farmId)/members/$(uid));
     }
     match /farms/{farmId} {
-      allow get: if member(farmId);
-      allow list, write: if false;
+      // A transaction may check its generated ID before creating a new farm.
+      // Existing farm contents remain restricted to members.
+      allow get: if verified()
+        && (!exists(/databases/$(database)/documents/farms/$(farmId)) || member(farmId));
+      allow list, delete: if false;
+      allow create: if verified()
+        && request.resource.data.keys().hasAll(['name', 'ownerId', 'createdAt', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['name', 'ownerId', 'createdAt', 'updatedAt'])
+        && validName(request.resource.data.name)
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && memberMatches(farmId, request.auth.uid, 'owner')
+        && mirrorMatches(farmId, request.auth.uid, 'owner');
+      allow update: if staff(farmId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'updatedAt'])
+        && validName(request.resource.data.name)
+        && request.resource.data.updatedAt == request.time;
       match /members/{uid} {
         allow get: if member(farmId) && (request.auth.uid == uid || staff(farmId));
         allow list: if staff(farmId);
-        allow write: if false;
+        allow create: if verified() && validMember(uid)
+          && mirrorMatches(farmId, uid, request.resource.data.role)
+          && ((bootstrap(farmId, uid) && request.resource.data.role == 'owner')
+            || (owner(farmId) && notOwner(farmId, uid)
+              && request.resource.data.role in ['manager', 'member']));
+        allow update: if owner(farmId) && notOwner(farmId, uid) && validMember(uid)
+          && request.resource.data.role in ['manager', 'member']
+          && mirrorMatches(farmId, uid, request.resource.data.role);
+        allow delete: if owner(farmId) && notOwner(farmId, uid)
+          && !existsAfter(/databases/$(database)/documents/users/$(uid)/farms/$(farmId));
       }
+      // Historical audit records are read-only. No client-generated trusted audit log.
       match /audit/{eventId} {
-        allow read: if member(farmId) && role(farmId) == 'owner';
+        allow read: if owner(farmId);
         allow write: if false;
       }
     }
-    // Agricultural records get explicit scoped rules when implemented.
     match /{document=**} { allow read, write: if false; }
   }
 }

@@ -5,7 +5,8 @@ and Cloud Firestore. Android and iOS are the initial targets.
 
 Implemented: email/password signup and login, password reset, email verification,
 session gate, logout, farm creation, membership, owner/manager/member permissions,
-trusted callable mutations, audit metadata and Firestore rules.
+direct Firestore transactions and role-enforcing security rules.
+No Firebase Functions or custom backend is used.
 
 AI diagnosis, advisor/RAG, weather, crop planning, offline agricultural packs,
 biometric unlock and media synchronization are still planned.
@@ -59,19 +60,16 @@ await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 Keep the remaining database initialization in that function. Do not include
 service-account credentials or backend secrets in the app.
 
-Farm management needs callable functions. Install Node.js 22 and follow
-[Accounts and farms](docs/ACCOUNTS_AND_FARMS.md) for tests and deployment.
-From the root, after configuring the intended development project:
+Farm management uses Firestore directly. Follow [Accounts and farms](docs/ACCOUNTS_AND_FARMS.md)
+for transaction design, security rules and setup. Deploy the rules to your development project:
 
 ```bash
-npm --prefix functions ci
-firebase deploy --only functions:membership,firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
+firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 flutter run -t lib/main_firebase.dart
 ```
 
-Cloud Functions deployment requires the Blaze plan. No live Firebase resources or
-billing settings were changed by this code update. Local emulators can test the
-backend without a production deployment.
+No Functions deployment is needed. No live Firebase resources or settings were
+changed by this code update.
 
 ## Verification
 
@@ -79,16 +77,16 @@ backend without a production deployment.
 dart format lib test
 flutter analyze
 flutter test
-npm --prefix functions test
-firebase emulators:exec --only firestore --project demo-agri-rules "npm --prefix functions run test:emulator"
+npm --prefix security_tests ci
+firebase emulators:exec --only firestore --project demo-agri-rules "npm --prefix security_tests test"
 ```
 
-Executed: 9 backend tests, 6 Firestore rules tests, 1 real transaction test; all
-passed. JavaScript imports/syntax, JSON and local Dart imports checked.
-Not executed: Flutter analyzer, 9 Flutter tests and mobile device/email flows;
-Flutter SDK is unavailable here. Resolve dependencies and commit `pubspec.lock`
-once Flutter validation succeeds. Backend versions are recorded in
-`functions/package-lock.json`.
+The local security test package validates direct client operations against actual
+Firestore rules. It is not a backend service. All 15 rules/transaction emulator
+tests passed, including concurrent creation and atomic membership changes. Flutter analyzer, nine Flutter tests and mobile/email flows
+remain unverified here because Flutter SDK is unavailable. Commit `pubspec.lock`
+after successful local dependency resolution. Test dependencies are locked in
+`security_tests/package-lock.json`.
 
 ## Learn it step by step
 

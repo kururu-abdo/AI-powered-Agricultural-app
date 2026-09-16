@@ -1,4 +1,3 @@
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/core_database/firebase_providers.dart';
@@ -8,7 +7,7 @@ import 'domain/farm_repository.dart';
 
 final farmRepositoryProvider = Provider<FarmRepository>((ref) {
   return FirebaseFarmRepository(ref.watch(firestoreProvider),
-      FirebaseFunctions.instanceFor(region: 'us-central1'));
+      ref.watch(firebaseAuthProvider));
 });
 
 final farmsProvider = FutureProvider.autoDispose.family<List<Farm>, String>((ref, uid) {

@@ -13,7 +13,7 @@ Add use cases for business workflows; do not create forwarding classes without a
 - `core/core_security/`: future device unlock and secret storage.
 - `core/core_ai/`: future on-device runtime, model lifecycle and vector index.
 - `features/farm_membership/`: farm entities, server adapters, Riverpod state and UI.
-- `functions/`: trusted farm/membership mutations and role checks.
+- `security_tests/`: local Firestore emulator tests; never deployed.
 - `features/<feature>/domain/`: entities, repository contracts, use cases.
 - `features/<feature>/data/`: models, data sources, repository implementations.
 - `features/<feature>/presentation/`: views, view_models, widgets.
@@ -52,11 +52,11 @@ private conversation/context simply because the connection returned.
 
 ## Tenancy and security
 Implemented paths are `farms/{farmId}`, `farms/{farmId}/members/{uid}` and the
-server-owned discovery mirror `users/{uid}/farms/{farmId}`. Verified membership
-controls reads through rules. All client metadata writes are denied. Callable
-functions check live ownership/membership inside transactions and update the
-membership plus discovery mirror atomically. Owner cannot be demoted or removed.
-See ACCOUNTS_AND_FARMS.md for the capability matrix and tested role boundaries.
+user-specific discovery mirror `users/{uid}/farms/{farmId}`. Flutter performs
+online Firestore transactions directly. Security rules validate verified identity,
+existing ownership, immutable owner fields and consistent membership/mirror state
+using getAfter(). No Firebase Functions or Admin SDK is used. See
+ACCOUNTS_AND_FARMS.md for the role matrix and transaction walkthrough.
 
 At startup, the previous foundation's persisted Firestore cache is cleared before
 use; no client farm writes or offline outbox exist yet. On logout Riverpod results

@@ -22,4 +22,3 @@ firebase-debug.log
 node_modules/
 *-debug.log
 .firebase/
-functions/.env*

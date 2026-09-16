@@ -43,7 +43,7 @@ class _FarmsScreenState extends ConsumerState<FarmsScreen> with WidgetsBindingOb
     await ref.read(farmViewModelProvider.notifier).renameFarm(farm.id, name);
   }
   Future<void> _add(Farm farm) async {
-    final uid = await _textInput('Add verified member', 'Member account ID');
+    final uid = await _textInput('Add member', 'Member account ID');
     if (!mounted || uid == null) return;
     await ref.read(farmViewModelProvider.notifier).setMember(farm.id, uid, FarmRole.member);
   }

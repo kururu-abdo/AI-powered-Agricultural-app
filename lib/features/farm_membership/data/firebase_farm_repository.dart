@@ -1,14 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 
 import '../domain/farm.dart';
 import '../domain/farm_repository.dart';
 
 class FirebaseFarmRepository implements FarmRepository {
-  FirebaseFarmRepository(this._db, this._functions);
+  FirebaseFarmRepository(this._db, this._auth);
   final FirebaseFirestore _db;
-  final FirebaseFunctions _functions;
+  final FirebaseAuth _auth;
   static const _server = GetOptions(source: Source.server);
 
   @override
@@ -39,34 +39,104 @@ class FirebaseFarmRepository implements FarmRepository {
         role: FarmRole.values.byName(doc.data()['role'] as String))).toList();
   });
 
-  @override
-  Future<void> createFarm(String id, String name) => _call('createFarm', {'farmId': id, 'name': name});
-  @override
-  Future<void> renameFarm(String id, String name) => _call('renameFarm', {'farmId': id, 'name': name});
-  @override
-  Future<void> setMember(String farmId, String uid, FarmRole role) =>
-      _call('setFarmMember', {'farmId': farmId, 'uid': uid, 'role': role.name});
-  @override
-  Future<void> removeMember(String farmId, String uid) =>
-      _call('removeFarmMember', {'farmId': farmId, 'uid': uid});
+  String _uid() {
+    final user = _auth.currentUser;
+    if (user == null || !user.emailVerified) {
+      throw const FarmFailure('Sign in with a verified account first.');
+    }
+    return user.uid;
+  }
 
-  Future<void> _call(String name, Map<String, Object> data) => _safe(() async {
-    await _functions.httpsCallable(name).call<Object?>(data);
+  String _name(String value) {
+    final name = value.trim();
+    if (name.length < 2 || name.length > 80) {
+      throw const FarmFailure('Farm name must have 2–80 characters.');
+    }
+    return name;
+  }
+
+  @override
+  Future<void> createFarm(String id, String name) => _safe(() async {
+    final uid = _uid();
+    final value = _name(name);
+    final farm = _db.collection('farms').doc(id);
+    try {
+      await _db.runTransaction<void>((tx) async {
+        final existing = await tx.get(farm);
+        if (existing.exists) {
+          if (existing.data()?['ownerId'] != uid) {
+            throw const FarmFailure('This farm ID is already in use.');
+          }
+          return; // Same-ID retry after a lost response.
+        }
+        tx.set(farm, {
+          'name': value, 'ownerId': uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(farm.collection('members').doc(uid), {
+          'uid': uid, 'role': 'owner', 'updatedAt': FieldValue.serverTimestamp(),
+        });
+        tx.set(_db.collection('users').doc(uid).collection('farms').doc(id),
+            {'farmId': id, 'role': 'owner'});
+      });
+    } on FirebaseException catch (error) {
+      // Concurrent identical creates can be rejected by immutable-owner rules
+      // before the SDK retries. Confirm the committed owner using a server read.
+      if (error.code != 'permission-denied' && error.code != 'aborted') rethrow;
+      final committed = await farm.get(_server);
+      if (committed.data()?['ownerId'] != uid) rethrow;
+    }
+  });
+
+  @override
+  Future<void> renameFarm(String id, String name) => _safe(() async {
+    _uid();
+    final value = _name(name);
+    final farm = _db.collection('farms').doc(id);
+    await _db.runTransaction<void>((tx) async {
+      await tx.get(farm); // Online transaction; rules enforce role at commit.
+      tx.update(farm, {'name': value, 'updatedAt': FieldValue.serverTimestamp()});
+    });
+  });
+
+  @override
+  Future<void> setMember(String farmId, String uid, FarmRole role) => _safe(() async {
+    _uid();
+    if (uid.isEmpty || uid.contains('/') || uid.length > 128 ||
+        role == FarmRole.owner) {
+      throw const FarmFailure('Use a valid account ID and member or manager role.');
+    }
+    final farm = _db.collection('farms').doc(farmId);
+    await _db.runTransaction<void>((tx) async {
+      await tx.get(farm);
+      tx.set(farm.collection('members').doc(uid), {
+        'uid': uid, 'role': role.name, 'updatedAt': FieldValue.serverTimestamp(),
+      });
+      tx.set(_db.collection('users').doc(uid).collection('farms').doc(farmId),
+          {'farmId': farmId, 'role': role.name});
+    });
+  });
+
+  @override
+  Future<void> removeMember(String farmId, String uid) => _safe(() async {
+    _uid();
+    final farm = _db.collection('farms').doc(farmId);
+    await _db.runTransaction<void>((tx) async {
+      await tx.get(farm);
+      tx.delete(farm.collection('members').doc(uid));
+      tx.delete(_db.collection('users').doc(uid).collection('farms').doc(farmId));
+    });
   });
 
   Future<T> _safe<T>(Future<T> Function() operation) async {
     try { return await operation(); }
-    on FirebaseFunctionsException catch (error) {
+    on FirebaseException catch (error) {
       throw FarmFailure(switch (error.code) {
-        'permission-denied' => 'You do not have permission for this operation.',
+        'permission-denied' => 'Access denied. Check your role and refresh farm access.',
         'unauthenticated' => 'Sign in again to continue.',
-        'failed-precondition' => 'Use an active verified member account. The owner cannot be changed.',
-        'resource-exhausted' => 'Account limit reached. Please try again later.',
-        'invalid-argument' => 'Check the farm name, member ID and role.',
-        _ => 'Could not complete the request. Check your connection and retry.',
+        _ => 'Could not complete the request. Connect and retry.',
       });
-    } on FirebaseException catch (_) {
-      throw const FarmFailure('Could not load current farm access. Connect and refresh.');
     }
   }
 }

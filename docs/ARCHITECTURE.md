@@ -17,8 +17,9 @@ Add use cases for business workflows; do not create forwarding classes without a
 - `features/<feature>/presentation/`: views, view_models, widgets.
 - `shared/widgets/`: UI reused across features once needed.
 
-Only home has implementation in this increment. Empty module folders intentionally
-contain .gitkeep files. This avoids pretending unfinished features are available.
+Home and the first authentication increment are implemented. Other modules remain
+planned. Authentication uses a plain-Dart contract and a Firebase adapter, with
+Riverpod command state separate from the session stream. See AUTHENTICATION_STEP_BY_STEP.md.
 
 ## Firebase and offline boundaries
 Firebase Authentication owns credentials and token refresh. Never store passwords

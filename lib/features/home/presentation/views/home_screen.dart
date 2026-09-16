@@ -43,7 +43,9 @@ class HomeScreen extends ConsumerWidget {
               ),
             if (state.selectedModule case final module?) ...[
               const SizedBox(height: 16),
-              Text('${module.title} — planned',
+              Text(module == FeatureModule.authentication && firebaseEnabled
+                  ? 'Email/password authentication ready; farm membership next'
+                  : '${module.title} — planned',
                   style: Theme.of(context).textTheme.titleMedium),
               const Text('This module has its own domain, data and '
                   'presentation folders ready for implementation.'),

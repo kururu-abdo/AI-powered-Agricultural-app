@@ -2,8 +2,9 @@
 
 Increment 0: MVVM + Riverpod + feature-first structure, Firebase Authentication
 and Cloud Firestore wiring, a local preview screen, and conservative Firestore rules.
-Android and iOS are the initial targets. No authentication UI, AI inference, weather,
-planner, media upload or custom sync engine is implemented in this increment.
+Android and iOS are the initial targets. Email/password authentication is implemented. AI inference, weather, planner,
+media upload and custom sync remain planned. See
+[Authentication step by step](docs/AUTHENTICATION_STEP_BY_STEP.md).
 
 ## 1. Generate platform projects and run the preview
 
@@ -37,7 +38,7 @@ flutterfire configure --platforms=android,ios
 ```
 
 Select/create your Firebase project. In the Firebase console, create a Cloud
-Firestore database and enable Email/Password authentication for the next increment.
+Firestore database and enable Email/Password authentication.
 Choose the database region deliberately before creation.
 
 This scaffold initializes Firebase using the native Android/iOS configuration.
@@ -75,8 +76,9 @@ No Firebase resources or rules were remotely created/deployed by this deliverabl
 ## 4. Verify locally
 
 ```bash
-dart format lib
+dart format lib test
 flutter analyze
+flutter test
 flutter run
 flutter run -t lib/main_firebase.dart
 ```
@@ -91,17 +93,14 @@ Dart analyzer, compilation and device behavior are NOT verified. Run the command
 above before building on this foundation. Commit the generated pubspec.lock after
 successful resolution to reproduce dependency versions.
 
-## Next increment: Authentication
+## Authentication increment 1
 
-1. Plain-Dart AppUser and farm membership entities; AuthRepository contract.
-2. Firebase data source and repository implementation.
-3. Riverpod AsyncNotifier login/signup ViewModels and validation.
-4. Login, signup, session gate and logout UI.
-5. Trusted farm bootstrap and membership/role security rules.
-6. Emulator tests for tenant isolation, role escalation and auth failures.
-7. Offline session policy, shared-device cache cleanup and biometric unlock.
+Implemented domain contracts, Firebase adapter, Riverpod ViewModel, signup/login
+form, session gate and logout. Read [the step-by-step guide](docs/AUTHENTICATION_STEP_BY_STEP.md).
+Five tests are included but could not be executed without the Flutter SDK.
 
-See `docs/ARCHITECTURE.md` for offline and security boundaries.
+Next: password recovery and email verification, then trusted farm bootstrap,
+tenant rules, offline session policy and biometrics.
 
 ## Official references
 - https://firebase.google.com/docs/flutter/setup

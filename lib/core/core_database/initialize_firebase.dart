@@ -1,12 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 
-/// Android/iOS only. FlutterFire supplies native Firebase configuration.
-/// Initialization does not verify server reachability or authentication.
+/// Android/iOS. Offline agronomic packs will use a separate local store.
 Future<void> initializeFirebase() async {
   await Firebase.initializeApp();
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: 40 * 1024 * 1024,
-  );
+  final firestore = FirebaseFirestore.instance;
+  // This release has no queued farm writes. Remove any legacy foundation cache
+  // before opening Firestore, then keep authorization metadata memory-only.
+  await firestore.clearPersistence();
+  firestore.settings = const Settings(persistenceEnabled: false);
 }

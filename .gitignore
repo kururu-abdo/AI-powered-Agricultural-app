@@ -18,3 +18,8 @@ android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
 firebase-debug.log
 # Commit pubspec.lock after first dependency resolution.
+
+node_modules/
+*-debug.log
+.firebase/
+functions/.env*

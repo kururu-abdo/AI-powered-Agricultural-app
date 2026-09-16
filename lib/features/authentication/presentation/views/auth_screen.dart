@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/auth_validation.dart';
 import '../../domain/entities/auth_failure.dart';
 import '../view_models/auth_view_model.dart';
+import 'password_reset_screen.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -129,6 +130,16 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                       child: Text(busy ? 'Please wait…'
                           : _signingUp ? 'Create account' : 'Sign in'),
                     ),
+                    if (!_signingUp)
+                      TextButton(
+                        onPressed: busy ? null : () {
+                          ref.read(authViewModelProvider.notifier).clearError();
+                          Navigator.of(context).push<void>(MaterialPageRoute(
+                            builder: (_) => const PasswordResetScreen(),
+                          ));
+                        },
+                        child: const Text('Forgot password?'),
+                      ),
                     TextButton(
                       onPressed: busy ? null : () {
                         ref.read(authViewModelProvider.notifier).clearError();

@@ -39,6 +39,32 @@ class AuthViewModel extends AsyncNotifier<void> {
     await _execute(repository.signOut);
   }
 
+  Future<void> sendPasswordReset(String email) async {
+    if (state.isLoading) return;
+    final message = AuthValidation.email(email);
+    if (message != null) {
+      state = AsyncError(AuthFailure(message), StackTrace.current);
+      return;
+    }
+    await _execute(() => ref.read(authRepositoryProvider)
+        .sendPasswordReset(email.trim()));
+  }
+
+  Future<void> sendVerification() async {
+    if (state.isLoading) return;
+    await _execute(ref.read(authRepositoryProvider).sendVerification);
+  }
+
+  Future<void> refreshVerification() async {
+    if (state.isLoading) return;
+    await _execute(() async {
+      final verified = await ref.read(authRepositoryProvider).refreshVerification();
+      if (!verified) {
+        throw const AuthFailure('Email is not verified yet. Open the email link first.');
+      }
+    });
+  }
+
   void clearError() {
     if (!state.isLoading) state = const AsyncData(null);
   }

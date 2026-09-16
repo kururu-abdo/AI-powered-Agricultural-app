@@ -1,35 +1,39 @@
-# Agri Intelligence — Flutter foundation
+# Agri Intelligence
 
-Increment 0: MVVM + Riverpod + feature-first structure, Firebase Authentication
-and Cloud Firestore wiring, a local preview screen, and conservative Firestore rules.
-Android and iOS are the initial targets. Email/password authentication is implemented. AI inference, weather, planner,
-media upload and custom sync remain planned. See
-[Authentication step by step](docs/AUTHENTICATION_STEP_BY_STEP.md).
+Flutter agricultural intelligence foundation using MVVM, Riverpod, Firebase Auth
+and Cloud Firestore. Android and iOS are the initial targets.
 
-## 1. Generate platform projects and run the preview
+Implemented: email/password signup and login, password reset, email verification,
+session gate, logout, farm creation, membership, owner/manager/member permissions,
+trusted callable mutations, audit metadata and Firestore rules.
 
-Install current stable Flutter, Android tooling, and Xcode for iOS on macOS.
-Extract this archive and open a terminal in `agri_intelligence`:
+AI diagnosis, advisor/RAG, weather, crop planning, offline agricultural packs,
+biometric unlock and media synchronization are still planned.
+
+## Run the preview
+
+Install Flutter stable and platform tooling (Xcode on macOS for iOS).
+If `android/` and `ios/` do not yet exist:
 
 ```bash
 bash scripts/bootstrap.sh com.yourcompany
+```
+
+The script generates native wrappers without overwriting the authored Dart files.
+Use your reverse-domain organization before registering Firebase apps. On Windows,
+run this script through Git Bash. Native wrappers were not generated in the
+authoring environment because the Flutter SDK is unavailable.
+
+```bash
+flutter pub get
 flutter run
 ```
 
-Replace `com.yourcompany` with your reverse-domain organization before registering
-Firebase apps. The script generates Android/iOS wrappers with your installed SDK
-in a temporary directory, then copies only the native projects into this scaffold.
-It preserves the authored Dart code and pubspec. The default is `com.example`.
-On Windows, use Git Bash for the script. Native wrappers are not included because
-Flutter is unavailable in the environment where this scaffold was authored.
+`main.dart` is a data-free preview. It does not bypass authentication for farm data.
 
-The preview runs `lib/main.dart` with no Firebase initialization and shows planned
-modules. Tap a module to exercise the Riverpod ViewModel. This is not an auth bypass:
-no farm data or repository implementation is accessible from the preview.
+## Connect Firebase and run the application
 
-## 2. Connect your Firebase project
-
-Install the Firebase CLI using the official setup guide, then:
+Install Firebase CLI, then:
 
 ```bash
 firebase login
@@ -37,73 +41,60 @@ dart pub global activate flutterfire_cli
 flutterfire configure --platforms=android,ios
 ```
 
-Select/create your Firebase project. In the Firebase console, create a Cloud
-Firestore database and enable Email/Password authentication.
-Choose the database region deliberately before creation.
+Select your development Firebase project, create a Firestore database, and enable
+Email/Password in Firebase Authentication. Configure reset/verification templates.
+The client initially uses native Android/iOS Firebase configuration. Ensure
+FlutterFire generated and linked `android/app/google-services.json` and
+`ios/Runner/GoogleService-Info.plist`.
 
-This scaffold initializes Firebase using the native Android/iOS configuration.
-Ensure FlutterFire created `android/app/google-services.json` and
-`ios/Runner/GoogleService-Info.plist` and linked them to the respective apps.
-If FlutterFire only generated `lib/firebase_options.dart`, update
-`lib/core/core_database/initialize_firebase.dart` with:
+If using generated Dart options instead, update
+`lib/core/core_database/initialize_firebase.dart`:
 
 ```dart
 import '../../firebase_options.dart';
-// Inside initializeFirebase(), replace Firebase.initializeApp():
+// Replace Firebase.initializeApp() inside initializeFirebase():
 await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 ```
 
-Then run the Firebase entry point:
+Keep the remaining database initialization in that function. Do not include
+service-account credentials or backend secrets in the app.
+
+Farm management needs callable functions. Install Node.js 22 and follow
+[Accounts and farms](docs/ACCOUNTS_AND_FARMS.md) for tests and deployment.
+From the root, after configuring the intended development project:
 
 ```bash
+npm --prefix functions ci
+firebase deploy --only functions:membership,firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
 flutter run -t lib/main_firebase.dart
 ```
 
-A successful startup means the SDK initialized; it does not mean the device is
-online, a user is authenticated or server rules have been deployed.
-Never put service-account credentials or AI API secrets in this application.
+Cloud Functions deployment requires the Blaze plan. No live Firebase resources or
+billing settings were changed by this code update. Local emulators can test the
+backend without a production deployment.
 
-## 3. Apply the baseline rules to a NEW development project
-
-```bash
-firebase deploy --only firestore:rules,firestore:indexes --project YOUR_PROJECT_ID
-```
-
-These rules deny every read/write. Do not deploy over an existing application's
-rules. Feature-specific access will be added with authentication and tenant rules.
-No Firebase resources or rules were remotely created/deployed by this deliverable.
-
-## 4. Verify locally
+## Verification
 
 ```bash
 dart format lib test
 flutter analyze
 flutter test
-flutter run
-flutter run -t lib/main_firebase.dart
+npm --prefix functions test
+firebase emulators:exec --only firestore --project demo-agri-rules "npm --prefix functions run test:emulator"
 ```
 
-Check the preview with airplane mode enabled; select a module and confirm its
-planned status. Configure Firebase, run the Firebase entry point, and confirm it
-shows initialization status. Incorrect configuration should show a setup message.
+Executed: 9 backend tests, 6 Firestore rules tests, 1 real transaction test; all
+passed. JavaScript imports/syntax, JSON and local Dart imports checked.
+Not executed: Flutter analyzer, 9 Flutter tests and mobile device/email flows;
+Flutter SDK is unavailable here. Resolve dependencies and commit `pubspec.lock`
+once Flutter validation succeeds. Backend versions are recorded in
+`functions/package-lock.json`.
 
-Validation here: archive integrity, local Dart import resolution, JSON parsing and
-shell syntax checked. Flutter/Dart SDKs are unavailable, so dependency resolution,
-Dart analyzer, compilation and device behavior are NOT verified. Run the commands
-above before building on this foundation. Commit the generated pubspec.lock after
-successful resolution to reproduce dependency versions.
+## Learn it step by step
 
-## Authentication increment 1
+1. [Initial authentication architecture](docs/AUTHENTICATION_STEP_BY_STEP.md)
+2. [Password recovery, verification, farms and roles](docs/ACCOUNTS_AND_FARMS.md)
+3. [Architecture and offline boundaries](docs/ARCHITECTURE.md)
 
-Implemented domain contracts, Firebase adapter, Riverpod ViewModel, signup/login
-form, session gate and logout. Read [the step-by-step guide](docs/AUTHENTICATION_STEP_BY_STEP.md).
-Five tests are included but could not be executed without the Flutter SDK.
-
-Next: password recovery and email verification, then trusted farm bootstrap,
-tenant rules, offline session policy and biometrics.
-
-## Official references
-- https://firebase.google.com/docs/flutter/setup
-- https://firebase.google.com/docs/firestore/manage-data/enable-offline
-- https://firebase.google.com/docs/auth/flutter/start
-- https://riverpod.dev/docs/introduction/getting_started
+Farm membership is online-authoritative. Persistent Firestore caching is currently
+disabled; encrypted offline crop/guide/model storage will be added separately.

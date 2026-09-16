@@ -8,6 +8,8 @@ import 'package:agri_intelligence/features/authentication/domain/entities/auth_f
 import 'package:agri_intelligence/features/authentication/domain/repositories/auth_repository.dart';
 import 'package:agri_intelligence/features/authentication/presentation/view_models/auth_view_model.dart';
 import 'package:agri_intelligence/features/authentication/presentation/views/auth_gate.dart';
+import 'package:agri_intelligence/features/farm_membership/farm_providers.dart';
+import 'package:agri_intelligence/features/farm_membership/domain/farm.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +19,9 @@ class FakeAuthRepository implements AuthRepository {
   Completer<void>? pending;
   Object? failure;
   int signInCalls = 0;
+  String? resetEmail;
+  bool verified = false;
+  int verificationEmails = 0;
   String? receivedEmail;
   String? receivedPassword;
 
@@ -38,6 +43,13 @@ class FakeAuthRepository implements AuthRepository {
   @override
   Future<void> signUp({required String email, required String password}) =>
       signIn(email: email, password: password);
+
+  @override
+  Future<void> sendPasswordReset(String email) async { resetEmail = email; }
+  @override
+  Future<void> sendVerification() async { verificationEmails++; }
+  @override
+  Future<bool> refreshVerification() async => verified;
 
   @override
   Future<void> signOut() async => events.add(null);
@@ -99,20 +111,57 @@ void main() {
   testWidgets('session stream gates home and logout returns to login', (tester) async {
     final fake = FakeAuthRepository();
     await tester.pumpWidget(ProviderScope(
-      overrides: [authRepositoryProvider.overrideWithValue(fake)],
+      overrides: [
+        authRepositoryProvider.overrideWithValue(fake),
+        farmsProvider('farmer-1').overrideWith((ref) async => <Farm>[]),
+      ],
       child: const MaterialApp(home: AuthGate()),
     ));
     await tester.pumpAndSettle();
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Your farm. In the field.'), findsNothing);
-    fake.events.add(const AppUser(id: 'farmer-1', email: 'farmer@example.com'));
+    expect(find.text('My farms'), findsNothing);
+    fake.events.add(const AppUser(id: 'farmer-1', email: 'farmer@example.com', emailVerified: true));
     await tester.pumpAndSettle();
-    expect(find.text('Your farm. In the field.'), findsOneWidget);
+    expect(find.text('My farms'), findsOneWidget);
     await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Your farm. In the field.'), findsNothing);
+    expect(find.text('My farms'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await fake.events.close();
   });
+  test('reset trims email; verification stays blocked until confirmed', () async {
+    final fake = FakeAuthRepository();
+    addTearDown(fake.events.close);
+    final container = ProviderContainer.test(overrides: [
+      authRepositoryProvider.overrideWithValue(fake),
+    ]);
+    await container.read(authViewModelProvider.future);
+    final vm = container.read(authViewModelProvider.notifier);
+    await vm.sendPasswordReset(' farmer@example.com ');
+    expect(fake.resetEmail, 'farmer@example.com');
+    await vm.sendVerification();
+    expect(fake.verificationEmails, 1);
+    await vm.refreshVerification();
+    expect(container.read(authViewModelProvider).hasError, isTrue);
+    fake.verified = true;
+    await vm.refreshVerification();
+    expect(container.read(authViewModelProvider).hasError, isFalse);
+  });
+
+  testWidgets('unverified identity cannot reach farm UI', (tester) async {
+    final fake = FakeAuthRepository();
+    await tester.pumpWidget(ProviderScope(
+      overrides: [authRepositoryProvider.overrideWithValue(fake)],
+      child: const MaterialApp(home: AuthGate()),
+    ));
+    await tester.pumpAndSettle();
+    fake.events.add(const AppUser(id: 'unverified', email: 'new@example.com'));
+    await tester.pumpAndSettle();
+    expect(find.text('Verify your email'), findsOneWidget);
+    expect(find.text('My farms'), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await fake.events.close();
+  });
+
 }

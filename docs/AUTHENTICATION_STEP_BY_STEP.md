@@ -1,4 +1,8 @@
-# Authentication — increment 1
+# Authentication — increment 1 (historical walkthrough)
+
+This describes the first increment. Password reset, verification and farm roles
+are now implemented; current setup and behavior are in
+[Accounts and farms](ACCOUNTS_AND_FARMS.md). Use that guide for deployment and tests.
 
 ## Outcome and scope
 Email/password signup, login, session-driven screen selection and logout are now

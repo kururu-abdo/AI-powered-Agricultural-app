@@ -11,8 +11,8 @@ class FirebaseAuthRepository implements AuthRepository {
   final FirebaseAuth _auth;
 
   @override
-  Stream<AppUser?> watchSession() => _auth.authStateChanges().map(
-        (user) => user == null ? null : AppUser(id: user.uid, email: user.email),
+  Stream<AppUser?> watchSession() => _auth.idTokenChanges().map(
+        (user) => user == null ? null : AppUser(id: user.uid, email: user.email, emailVerified: user.emailVerified),
       );
 
   @override
@@ -29,6 +29,45 @@ class FirebaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() => _translate(_auth.signOut);
+
+  @override
+  Future<void> sendPasswordReset(String email) async {
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (error) {
+      // Same success response for nonexistent accounts, including projects
+      // that have not yet enabled email enumeration protection.
+      if (!['user-not-found', 'user-disabled'].contains(error.code)) {
+        throw AuthFailure(messageForCode(error.code));
+      }
+    }
+  }
+
+  @override
+  Future<void> sendVerification() => _translate(() async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFailure('Sign in again to continue.');
+    await user.sendEmailVerification();
+  });
+
+  @override
+  Future<bool> refreshVerification() async {
+    var verified = false;
+    await _translate(() async {
+      final user = _auth.currentUser;
+      if (user == null) throw const AuthFailure('Sign in again to continue.');
+      await user.reload();
+      final refreshed = _auth.currentUser;
+      if (refreshed == null || refreshed.uid != user.uid) {
+        throw const AuthFailure('Your session changed. Please sign in again.');
+      }
+      // Rules/callables inspect the token claim, so refresh it BEFORE opening
+      // the farm gate. idTokenChanges emits the refreshed identity.
+      await refreshed.getIdToken(true);
+      verified = refreshed.emailVerified;
+    });
+    return verified;
+  }
 
   Future<void> _translate(Future<void> Function() action) async {
     try {

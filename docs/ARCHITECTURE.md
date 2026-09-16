@@ -12,12 +12,14 @@ Add use cases for business workflows; do not create forwarding classes without a
 - `core/core_network/`: future external HTTP APIs only.
 - `core/core_security/`: future device unlock and secret storage.
 - `core/core_ai/`: future on-device runtime, model lifecycle and vector index.
+- `features/farm_membership/`: farm entities, server adapters, Riverpod state and UI.
+- `functions/`: trusted farm/membership mutations and role checks.
 - `features/<feature>/domain/`: entities, repository contracts, use cases.
 - `features/<feature>/data/`: models, data sources, repository implementations.
 - `features/<feature>/presentation/`: views, view_models, widgets.
 - `shared/widgets/`: UI reused across features once needed.
 
-Home and the first authentication increment are implemented. Other modules remain
+Home, account recovery/verification and farm membership are implemented. Other modules remain
 planned. Authentication uses a plain-Dart contract and a Firebase adapter, with
 Riverpod command state separate from the session stream. See AUTHENTICATION_STEP_BY_STEP.md.
 
@@ -26,8 +28,11 @@ Firebase Authentication owns credentials and token refresh. Never store password
 for offline login. A previously persisted session plus device unlock is a distinct
 flow from an online sign-in; implement it with explicit offline access policy.
 
-Cloud Firestore is the primary synced document database. On Android/iOS its SDK
-provides a persistent cache and pending document writes. Do not duplicate those
+Cloud Firestore is the primary backend document database. Its SDK can provide
+persistent cache and pending document writes, but persistence is DISABLED in the
+current release: all implemented farm data is authorization metadata, fetched
+from the server. A future agricultural data layer must add scoped encrypted
+offline storage and a safe cache/pending-write policy. Do not duplicate those
 writes in a Dio queue. Treat snapshot isFromCache and hasPendingWrites separately:
 cache provenance is not a connectivity signal, and pending writes are not success.
 Write Futures may wait for server acknowledgement while offline; use local UI state
@@ -45,14 +50,18 @@ versioned plans; do not blindly use last-write-wins for agronomic decisions.
 Cloud fallback must be a visible, consented policy, never an automatic upload of
 private conversation/context simply because the connection returned.
 
-## Tenancy and security (next increment)
-Proposed paths: farms/{farmId}, farms/{farmId}/members/{uid}, and scoped collections
-for diagnostics, plans and conversations. Membership and roles must be enforced by
-Firestore rules/backend code, not just UI state. A trusted bootstrap operation
-should create the farm and owner membership; never allow self-assigned manager roles.
-Rules deny all access until scoped features and emulator rule tests are implemented.
-Before enabling account switching, define pending-write handling and cache cleanup
-so one user cannot inspect another user's cached farm data on a shared device.
+## Tenancy and security
+Implemented paths are `farms/{farmId}`, `farms/{farmId}/members/{uid}` and the
+server-owned discovery mirror `users/{uid}/farms/{farmId}`. Verified membership
+controls reads through rules. All client metadata writes are denied. Callable
+functions check live ownership/membership inside transactions and update the
+membership plus discovery mirror atomically. Owner cannot be demoted or removed.
+See ACCOUNTS_AND_FARMS.md for the capability matrix and tested role boundaries.
+
+At startup, the previous foundation's persisted Firestore cache is cleared before
+use; no client farm writes or offline outbox exist yet. On logout Riverpod results
+are invalidated. Do not keep clearing caches once offline agricultural writes are
+introduced: add per-user data isolation and pending-operation reconciliation first.
 
 ## AI and scheduling (deferred)
 Choose CV and LLM runtimes separately after measuring target Android/iOS hardware.
